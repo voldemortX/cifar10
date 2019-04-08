@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import time
+import sys
 from torchsummary import summary
 
 
@@ -143,6 +144,6 @@ if __name__ == "__main__":
     summary(net, (3, 32, 32))
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.005, momentum=0.9)
-    #train(2)
+    train(int(sys.argv[1]))
     inference(test_loader)
     torch.save(net, str(time.time()))
