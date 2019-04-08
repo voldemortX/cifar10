@@ -7,27 +7,53 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import time
+from torchsummary import summary
 
 
-# Network architecture
+vgg_B = [64, 64, -1, 128, 128, -1, 256, 256, -1, 512, 512, -1, 512, 512]
+
+
+# Network architecture(like vgg-B)
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.convs = generate_layers_vgg(vgg_B)
+        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fcs = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, 10),
+            nn.ReLU(inplace=True)
+            )
+
+        # init
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.convs(x)
+        x = self.global_avg_pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fcs(x)
         return x
+
+
+def generate_layers_vgg(config):
+    layers = []
+    in_channels = 3
+    for out_channels in config:
+        # max pool
+        if out_channels == -1:
+            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        # convolution
+        else:
+            layers.append(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1))
+            layers.append(nn.BatchNorm2d(out_channels))
+            layers.append(nn.ReLU(inplace=True))
+            in_channels = out_channels
+
+    return nn.Sequential(*layers)
 
 
 # Draw images
@@ -55,6 +81,7 @@ def init(batch_size):
 
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=transform)
+    print(type(trainset))
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                               shuffle=True, num_workers=2)
 
@@ -113,7 +140,9 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
     net.to(device)
+    summary(net, (3, 32, 32))
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.005, momentum=0.9)
-    train(2)
+    #train(2)
     inference(test_loader)
+    torch.save(net, str(time.time()))
