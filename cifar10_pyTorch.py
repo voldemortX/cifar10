@@ -4,11 +4,7 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import time
-import sys
-from torchsummary import summary
 
 
 vgg_B = [64, 64, -1, 128, 128, -1, 256, 256, -1, 512, 512, -1, 512, 512]
@@ -21,10 +17,13 @@ class Net(nn.Module):
         self.convs = generate_layers_vgg(vgg_B)
         self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fcs = nn.Sequential(
-            nn.Linear(512, 512),
+            nn.Linear(512, 4096),
             nn.ReLU(inplace=True),
-            nn.Linear(512, 10),
-            nn.ReLU(inplace=True)
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(4096, 10)
             )
 
         # init
@@ -67,11 +66,11 @@ def show(images):
 
 
 # Show random images
-def visualize(loader):
+def visualize(loader, categories):
     temp = iter(loader)
     images, labels = temp.next()
     show(torchvision.utils.make_grid(images))
-    print(' '.join('%5s' % classes[labels[j]] for j in range(labels.size(0))))
+    print(' '.join('%5s' % categories[labels[j]] for j in range(labels.size(0))))
 
 
 # Load data
@@ -80,16 +79,15 @@ def init(batch_size):
         [transforms.ToTensor(),
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=transform)
-    print(type(trainset))
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+    train_set = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                             download=True, transform=transform)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                               shuffle=True, num_workers=2)
 
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                           download=True, transform=transform)
-    test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                             shuffle=False, num_workers=2)
+    test_set = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                            download=True, transform=transform)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
+                                              shuffle=False, num_workers=2)
 
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
@@ -97,29 +95,8 @@ def init(batch_size):
     return train_loader, test_loader, classes
 
 
-# Train data
-def train(num_epochs):
-    for epoch in range(num_epochs):
-        running_loss = 0.0
-        time_now = time.time()
-        for i, data in enumerate(train_loader, 0):
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
-            optimizer.zero_grad()
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-            if i % 100 == 99:
-                print('[%d, %d] loss: %.4f' % (epoch + 1, i + 1, running_loss / 100))
-                running_loss = 0.0
-
-        print('Epoch time: %.2fs' % (time.time() - time_now))
-
-
 # Test
-def inference(loader):
+def inference(loader, device, net):
     correct = 0
     total = 0
     with torch.no_grad():
@@ -132,18 +109,45 @@ def inference(loader):
             correct += (predicted == labels).sum().item()
 
     print('Test acc: %f' % (100 * correct / total))
+    return correct / total
 
 
-if __name__ == "__main__":
-    train_loader, test_loader, classes = init(32)
-    visualize(train_loader)
-    net = Net()
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)
-    net.to(device)
-    summary(net, (3, 32, 32))
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.005, momentum=0.9)
-    train(int(sys.argv[1]))
-    inference(test_loader)
-    torch.save(net, str(time.time()))
+# Train
+# With early-stopping
+def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, net, acc_threshold=-0.005):
+    # acc_threshold gets cut by half every time the test acc drops
+    best_model = net.state_dict()
+    best_acc = 0
+    for epoch in range(num_epochs):
+        running_loss = 0.0
+        time_now = time.time()
+        correct = 0
+        total = 0
+        for i, data in enumerate(loader, 0):
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
+            optimizer.zero_grad()
+            outputs = net(inputs)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+            if i % 100 == 99:
+                print('[%d, %d] loss: %.4f' % (epoch + 1, i + 1, running_loss / 100))
+                running_loss = 0.0
+
+        print('Epoch time: %.2fs' % (time.time() - time_now))
+        print('Train acc: %f' % (100 * correct / total))
+        # Early-stopping scheme
+        test_acc = inference(loader=evaluation_loader, device=device, net=net)
+        if test_acc - best_acc < acc_threshold:
+            net.load_state_dict(best_model)
+            break
+        elif test_acc - best_acc < 0:
+            acc_threshold = acc_threshold / 2.0
+        else:
+            best_model = net.state_dict()
+            best_acc = test_acc
