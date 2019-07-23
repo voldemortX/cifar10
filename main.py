@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import argparse
 
+
 if __name__ == '__main__':
     # Settings
     parser = argparse.ArgumentParser(description='PyTorch 1.0')
@@ -16,9 +17,11 @@ if __name__ == '__main__':
                         help='learning rate (default: 0.01)')
     parser.add_argument('--save', type=bool, default=True,
                         help='save model (default: True)')
+    parser.add_argument('--continue-from', type=str, default=None,
+                        help='Continue training from a previous checkpoint')
     args = parser.parse_args()
 
-    # Codes
+    # Training settings
     train_loader, test_loader, categories = init(args.batch_size)
     visualize(train_loader, categories)
     net = Net()
@@ -29,11 +32,18 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=args.lr)
 
+    # Resume training?
+    if args.continue_from is not None:
+        net.load_state_dict(torch.load(args.continue_from))
+
+    # Train
     train(num_epochs=args.epochs, loader=train_loader, evaluation_loader=test_loader,
           device=device, optimizer=optimizer, criterion=criterion, net=net)
 
+    # Final evaluations
     train_acc = inference(loader=train_loader, device=device, net=net)
     test_acc = inference(loader=test_loader, device=device, net=net)
 
+    # Save parameters
     if args.save:
         torch.save(net.state_dict(), str(time.time()) + '.pth')

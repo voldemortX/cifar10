@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
 import time
+import copy
 
 
 vgg_B = [64, 64, -1, 128, 128, -1, 256, 256, -1, 512, 512, -1, 512, 512]
@@ -17,13 +18,13 @@ class Net(nn.Module):
         self.convs = generate_layers_vgg(vgg_B)
         self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fcs = nn.Sequential(
-            nn.Linear(512, 4096),
+            nn.Linear(512, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.Linear(4096, 4096),
+            nn.Linear(512, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.Linear(4096, 10)
+            nn.Linear(512, 10)
             )
 
         # init
@@ -75,17 +76,24 @@ def visualize(loader, categories):
 
 # Load data
 def init(batch_size):
-    transform = transforms.Compose(
+    # Augmentations
+    transform_train = transforms.Compose(
+        [transforms.RandomResizedCrop(32),
+         transforms.RandomHorizontalFlip(),
+         transforms.ToTensor(),
+         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+    transform_test = transforms.Compose(
         [transforms.ToTensor(),
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
     train_set = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                             download=True, transform=transform)
+                                             download=True, transform=transform_train)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                              shuffle=True, num_workers=2)
+                                               shuffle=True, num_workers=2)
 
     test_set = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                            download=True, transform=transform)
+                                            download=True, transform=transform_test)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
                                               shuffle=False, num_workers=2)
 
@@ -114,10 +122,10 @@ def inference(loader, device, net):
 
 # Train
 # With early-stopping
-def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, net, acc_threshold=-0.005):
-    # acc_threshold gets cut by half every time the test acc drops
-    best_model = net.state_dict()
+def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, net, patience=4):
+    best_model = copy.deepcopy(net.state_dict())
     best_acc = 0
+    counter = 0
     for epoch in range(num_epochs):
         running_loss = 0.0
         time_now = time.time()
@@ -143,11 +151,14 @@ def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, n
         print('Train acc: %f' % (100 * correct / total))
         # Early-stopping scheme
         test_acc = inference(loader=evaluation_loader, device=device, net=net)
-        if test_acc - best_acc < acc_threshold:
+        if counter >= patience:
             net.load_state_dict(best_model)
             break
         elif test_acc - best_acc < 0:
-            acc_threshold = acc_threshold / 2.0
+            counter += 1
         else:
-            best_model = net.state_dict()
+            counter = 0
+            best_model = copy.deepcopy(net.state_dict())
             best_acc = test_acc
+
+    net.load_state_dict(best_model)
