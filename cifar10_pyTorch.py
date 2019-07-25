@@ -78,8 +78,9 @@ def visualize(loader, categories):
 def init(batch_size):
     # Augmentations
     transform_train = transforms.Compose(
-        [transforms.RandomResizedCrop(32),
+        [transforms.RandomCrop(32, padding=4),
          transforms.RandomHorizontalFlip(),
+         transforms.RandomRotation(15),
          transforms.ToTensor(),
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
@@ -105,6 +106,7 @@ def init(batch_size):
 
 # Test
 def inference(loader, device, net):
+    net.eval()  # For BN & Dropout
     correct = 0
     total = 0
     with torch.no_grad():
@@ -117,12 +119,13 @@ def inference(loader, device, net):
             correct += (predicted == labels).sum().item()
 
     print('Test acc: %f' % (100 * correct / total))
+    net.train(mode=True)
     return correct / total
 
 
 # Train
 # With early-stopping
-def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, net, patience=4):
+def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, net, patience=7):
     best_model = copy.deepcopy(net.state_dict())
     best_acc = 0
     counter = 0

@@ -30,7 +30,7 @@ if __name__ == '__main__':
     net.to(device)
     summary(net, (3, 32, 32))
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(), lr=args.lr)
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
 
     # Resume training?
     if args.continue_from is not None:
