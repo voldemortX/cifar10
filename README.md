@@ -11,6 +11,10 @@ With augmentations(padded-4 crop, horizontal flip, 15 degree rotation), batch si
 
 lr=0.01&momentum=0.9 * 30 epochs *(89.1%)* + lr=0.001&momentum=0.9 * 10 epochs *(90.9%)* + lr=0.0001&momentum=0.9 * 10 epochs *(91.0%)*
 
+Auto replays with above strategy: *90.77%*
+
+Epoch time(batch size 64, GTX 960M): **93s**
+
 **2. Adam** 
 
 lr=0.01 * 30 epochs *(40.8%)* WTF???

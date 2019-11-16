@@ -1,8 +1,10 @@
 from cifar10_pyTorch import *
 from torchsummary import summary
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 import argparse
 
 
@@ -13,6 +15,8 @@ if __name__ == '__main__':
                         help='input batch size (default: 64)')
     parser.add_argument('--epochs', type=int, default=10,
                         help='number of epochs to train (default: 10)')
+    parser.add_argument('--iters', type=int, default=3,
+                        help='number of training iterations (default: 3)')
     parser.add_argument('--lr', type=float, default=0.01,
                         help='learning rate (default: 0.01)')
     parser.add_argument('--save', type=bool, default=True,
@@ -30,15 +34,17 @@ if __name__ == '__main__':
     net.to(device)
     summary(net, (3, 32, 32))
     criterion = nn.CrossEntropyLoss()
-    # optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
-    optimizer = optim.Adam(net.parameters(), lr=args.lr)
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
+    # optimizer = optim.Adam(net.parameters(), lr=args.lr)
+    writer = SummaryWriter('runs/experiment_' + str(int(time.time())))
 
     # Resume training?
     if args.continue_from is not None:
         net.load_state_dict(torch.load(args.continue_from))
 
     # Train
-    train(num_epochs=args.epochs, loader=train_loader, evaluation_loader=test_loader,
+    # Divide by 10 every x epochs
+    train(writer=writer, num_epochs=args.epochs, num_iters=args.iters, loader=train_loader, evaluation_loader=test_loader,
           device=device, optimizer=optimizer, criterion=criterion, net=net)
 
     # Final evaluations
@@ -48,3 +54,5 @@ if __name__ == '__main__':
     # Save parameters
     if args.save:
         torch.save(net.state_dict(), str(time.time()) + '.pth')
+
+    writer.close()

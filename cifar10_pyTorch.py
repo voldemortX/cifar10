@@ -6,7 +6,7 @@ import numpy as np
 import torch.nn as nn
 import time
 import copy
-
+import math
 
 vgg_B = [64, 64, -1, 128, 128, -1, 256, 256, -1, 512, 512, -1, 512, 512]
 
@@ -125,11 +125,18 @@ def inference(loader, device, net):
 
 # Train
 # With early-stopping
-def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, net, patience=7):
+def train(writer, num_epochs, num_iters, loader, evaluation_loader, device, optimizer, criterion, net, patience=7):
+    total_epochs = num_epochs * num_iters
     best_model = copy.deepcopy(net.state_dict())
     best_acc = 0
     counter = 0
-    for epoch in range(num_epochs):
+    epoch = 0
+    epoch_count = 0
+    while epoch < total_epochs:
+        # Divide lr by 10 every num_epochs
+        if epoch and epoch % num_epochs == 0:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] /= 10
         running_loss = 0.0
         time_now = time.time()
         correct = 0
@@ -147,21 +154,37 @@ def train(num_epochs, loader, evaluation_loader, device, optimizer, criterion, n
             optimizer.step()
             running_loss += loss.item()
             if i % 100 == 99:
-                print('[%d, %d] loss: %.4f' % (epoch + 1, i + 1, running_loss / 100))
+                print('[%d, %d] loss: %.4f' % (epoch_count + 1, i + 1, running_loss / 100))
+                writer.add_scalar('training loss',
+                                  running_loss / 100,
+                                  epoch_count * len(loader) + i + 1)
                 running_loss = 0.0
 
         print('Epoch time: %.2fs' % (time.time() - time_now))
         print('Train acc: %f' % (100 * correct / total))
+        writer.add_scalar('training acc',
+                          (correct / total),
+                          epoch_count + 1)
+
         # Early-stopping scheme
         test_acc = inference(loader=evaluation_loader, device=device, net=net)
-        if counter >= patience:
-            net.load_state_dict(best_model)
-            break
-        elif test_acc - best_acc < 0:
+        writer.add_scalar('test acc',
+                          test_acc,
+                          epoch_count + 1)
+
+        if test_acc - best_acc <= 0:
             counter += 1
         else:
             counter = 0
             best_model = copy.deepcopy(net.state_dict())
             best_acc = test_acc
+
+        if counter >= patience:
+            net.load_state_dict(best_model)
+            # Next iter
+            epoch = int(math.ceil(epoch / num_epochs) * num_epochs - 1)
+
+        epoch += 1
+        epoch_count += 1
 
     net.load_state_dict(best_model)
