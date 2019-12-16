@@ -194,3 +194,4 @@ def train(writer, num_epochs, num_iters, loader, evaluation_loader, device, opti
         epoch_count += 1
 
     net.load_state_dict(best_model)
+    amp.load_state_dict(best_amp)
