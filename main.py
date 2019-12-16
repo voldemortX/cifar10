@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import argparse
-
+from apex import amp
 
 if __name__ == '__main__':
     # Settings
@@ -35,6 +35,8 @@ if __name__ == '__main__':
     summary(net, (3, 32, 32))
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
+    model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+
     # optimizer = optim.Adam(net.parameters(), lr=args.lr)
     writer = SummaryWriter('runs/experiment_' + str(int(time.time())))
 

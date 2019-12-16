@@ -7,6 +7,7 @@ import torch.nn as nn
 import time
 import copy
 import math
+from apex import amp
 
 vgg_B = [64, 64, -1, 128, 128, -1, 256, 256, -1, 512, 512, -1, 512, 512]
 
@@ -150,7 +151,9 @@ def train(writer, num_epochs, num_iters, loader, evaluation_loader, device, opti
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
             loss = criterion(outputs, labels)
-            loss.backward()
+            #loss.backward()
+            with amp.scale_loss(loss, optimizer) as scaled_loss:
+                scaled_loss.backward()
             optimizer.step()
             running_loss += loss.item()
             if i % 100 == 99:
