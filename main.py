@@ -26,6 +26,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Training settings
+    torch.manual_seed(4396)
     train_loader, test_loader, categories = init(args.batch_size)
     visualize(train_loader, categories)
     net = Net()
