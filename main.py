@@ -43,7 +43,9 @@ if __name__ == '__main__':
 
     # Resume training?
     if args.continue_from is not None:
-        net.load_state_dict(torch.load(args.continue_from))
+        temp = torch.load(args.continue_from)
+        net.load_state_dict(temp['model'])
+        amp.load_state_dict(temp['amp'])
 
     # Train
     # Divide by 10 every x epochs
@@ -56,6 +58,10 @@ if __name__ == '__main__':
 
     # Save parameters
     if args.save:
-        torch.save(net.state_dict(), str(time.time()) + '.pth')
+        checkpoint = {
+            'model': net.state_dict(),
+            'amp': amp.state_dict()
+        }
+        torch.save(checkpoint, str(time.time()) + '.pt')
 
     writer.close()

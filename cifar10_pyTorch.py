@@ -129,6 +129,7 @@ def inference(loader, device, net):
 def train(writer, num_epochs, num_iters, loader, evaluation_loader, device, optimizer, criterion, net, patience=7):
     total_epochs = num_epochs * num_iters
     best_model = copy.deepcopy(net.state_dict())
+    best_amp = copy.deepcopy(amp.state_dict())
     best_acc = 0
     counter = 0
     epoch = 0
@@ -180,10 +181,12 @@ def train(writer, num_epochs, num_iters, loader, evaluation_loader, device, opti
         else:
             counter = 0
             best_model = copy.deepcopy(net.state_dict())
+            best_amp = copy.deepcopy(amp.state_dict())
             best_acc = test_acc
 
         if counter >= patience:
             net.load_state_dict(best_model)
+            amp.load_state_dict(best_amp)
             # Next iter
             epoch = int(math.ceil(epoch / num_epochs) * num_epochs - 1)
 
